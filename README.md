@@ -23,6 +23,60 @@ const result = engine.check({ coolant_temp: 151, pressure: 50 });
 // result.violatedNames === ["coolant_temp"]
 ```
 
+## CLI
+
+```bash
+# Check values against an industry preset
+flux-check check --preset automotive --values 3000,50,12.5
+
+# List available presets
+flux-check presets
+
+# Run a benchmark
+flux-check bench --preset automotive --iterations 100000
+```
+
+### CLI Output Example
+
+```
+Preset: automotive (Automotive engine and drivetrain constraints)
+Constraints: 8
+Values provided: 3
+
+  ✗ FAIL  coolant_temp: 3000 (bounds: [-40, 150] °C)
+  ✗ FAIL  oil_pressure: 50 (bounds: [0.5, 7] bar)
+  ✓ PASS  rpm: 12.5 (bounds: [0, 8000] rpm)
+  ...
+
+Result: ✗ VIOLATIONS
+Error mask: 0b00000011 (3)
+Severity: CAUTION
+Violated: coolant_temp, oil_pressure
+```
+
+## Industry Presets
+
+Six built-in presets for common domains:
+
+| Preset | Domain | Constraints |
+|--------|--------|:-----------:|
+| `automotive` | Engine & drivetrain | 8 |
+| `aviation` | Flight systems | 8 |
+| `medical` | Vital signs & devices | 7 |
+| `financial` | Trading & risk | 6 |
+| `energy` | Grid & power systems | 6 |
+| `iot` | Sensors & environment | 8 |
+
+```js
+import { getPreset, ConstraintEngine } from "@flux/check";
+
+const preset = getPreset("automotive");
+const engine = new ConstraintEngine();
+for (const c of preset.constraints) {
+  engine.addConstraint(c.name, c.lo, c.hi);
+}
+```
+
 ## API
 
 ### Core (`src/core.ts`)
@@ -55,6 +109,12 @@ const result = engine.check({ coolant_temp: 151, pressure: 50 });
   - `addSedimentLayer(context, corrections)`
   - `checkWithSediment(values)` → `SedimentResult`
 
+### Presets (`src/presets.ts`)
+
+- **`getPreset(name)`** — Get a preset by name (throws if not found).
+- **`listPresets()`** — List all available preset names.
+- **`presets`** — Full preset record.
+
 ## Invariants
 
 1. **Zero false negatives** — a value outside bounds is ALWAYS detected. No exceptions.
@@ -67,9 +127,18 @@ const result = engine.check({ coolant_temp: 151, pressure: 50 });
 
 ```bash
 npm install
-npx tsc
-node tests/core.test.mjs
+npx tsc            # compile
+node tests/core.test.mjs   # 59 tests
 ```
+
+## Examples
+
+See `examples/` for complete usage:
+
+- `examples/basic.ts` — Simple constraint checking
+- `examples/fracture.ts` — Fracture-coalesce decomposition
+- `examples/sediment.ts` — Sediment layer corrections
+- `examples/engine.ts` — Full engine with presets
 
 ## Ports
 

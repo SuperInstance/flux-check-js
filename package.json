@@ -2,23 +2,44 @@
   "name": "@flux/check",
   "version": "0.1.0",
   "type": "module",
-  "description": "Flux constraint engine — exact checking, fracture-coalesce, and sediment layers",
+  "description": "Flux constraint engine — exact checking, fracture-coalesce, and sediment layers. Zero false negatives.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "bin": {
+    "flux-check": "dist/cli.js"
+  },
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc",
     "test": "node --experimental-strip-types tests/core.test.ts",
-    "test:js": "node dist/tests/core.test.js"
+    "test:js": "node dist/tests/core.test.js",
+    "prepublishOnly": "tsc"
   },
   "keywords": [
     "constraint",
     "flux",
     "fracture",
     "coalesce",
-    "sediment"
+    "sediment",
+    "validation",
+    "bounds-checking",
+    "automotive",
+    "aviation",
+    "medical",
+    "iot"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SuperInstance/flux-check-js.git"
+  },
   "license": "MIT",
   "devDependencies": {
+    "@types/node": "^25.9.1",
     "typescript": "^6.0.3"
   }
 }

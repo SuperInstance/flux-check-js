@@ -11,3 +11,5 @@ export { SedimentStack } from "./sediment.js";
 export type { ConstraintCorrection, SedimentLayer, SedimentResult, } from "./sediment.js";
 export { ConstraintEngine } from "./engine.js";
 export type { CheckResult, EngineConstraint } from "./engine.js";
+export { presets, getPreset, listPresets } from "./presets.js";
+export type { Preset, PresetConstraint } from "./presets.js";

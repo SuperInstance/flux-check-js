@@ -11,3 +11,5 @@ export { fracture, fractureFromConstraints, coalesce, coalesceArrays, Dependency
 export { SedimentStack } from "./sediment.js";
 // Engine: unified interface
 export { ConstraintEngine } from "./engine.js";
+// Presets: industry constraint definitions
+export { presets, getPreset, listPresets } from "./presets.js";
