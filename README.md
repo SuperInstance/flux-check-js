@@ -2,25 +2,52 @@
 
 Flux constraint engine — exact checking, fracture-coalesce, and sediment layers. Zero false negatives.
 
-## Install
+## How It Works
 
-```bash
-npm install @flux/check
-```
+A constraint system checks whether values fall within acceptable bounds. This library does three things:
 
-## Quick Start
+**1. Exact checking.** Given N values and N `(lo, hi)` bounds, check each value against its bound. Produce a violation array and an error bitmask. NaN always violates. Boundary values pass (`<=`). No approximations.
+
+**2. Fracture-coalesce.** When constraints are independent (they share no underlying variables), split them into blocks, check each block separately, then merge the results with bitwise OR. Because independent blocks have disjoint event spaces, the merge is provably lossless — zero false negatives guaranteed.
+
+**3. Sediment layers.** Real systems accumulate corrections over time: "we widened the coolant temp range after the sensor upgrade" or "override this fail because we're in test mode." Sediment stacks immutable correction layers. Each layer can widen bounds, force pass/fail, or adjust severity. The stack is append-only — you never lose history.
 
 ```js
 import { ConstraintEngine, Severity } from "@flux/check";
 
+// Set up 8 constraints (automotive preset)
 const engine = new ConstraintEngine();
 engine.addConstraint("coolant_temp", -40, 150);
-engine.addConstraint("pressure", 0, 100);
+engine.addConstraint("oil_pressure", 0.5, 7);
+engine.addConstraint("rpm", 0, 8000);
+// ... 5 more
 
-const result = engine.check({ coolant_temp: 151, pressure: 50 });
-// result.errorMask === 0b001  (coolant_temp violated)
-// result.severity === Severity.CAUTION
-// result.violatedNames === ["coolant_temp"]
+// Check 8 values against 8 bounds
+const result = engine.check({
+  coolant_temp: 3000,  // violates [-40, 150]
+  oil_pressure: 50,    // violates [0.5, 7]
+  rpm: 12.5,           // passes [0, 8000]
+  // ...
+});
+
+// result.errorMask — bitmask of which constraints failed
+// result.violatedNames — ["coolant_temp", "oil_pressure"]
+// result.severity — Severity.CAUTION (2 violations, non-critical)
+```
+
+## What TypeScript Teaches Us
+
+Porting a constraint system to JavaScript reveals things about the architecture that static languages hide:
+
+- **Dynamic types still have exact bounds.** JavaScript has one number type (float64), but constraint bounds are still exact. `NaN` is a valid float64 value — and this library handles it by always flagging it as a violation. No `Option<f64>`, no `Result`. The dynamic type system doesn't make bounds checking harder; it just means you handle `NaN` explicitly rather than via the type system.
+- **`Float64Array` for performance.** The core `checkExact` function works on typed arrays, not plain objects. This isn't accidental — it avoids boxing overhead and keeps the hot path in predictable memory. For checking thousands of sensor readings per second, the difference between `number[]` and `Float64Array` is measurable.
+- **ESM modules for tree-shaking.** The library ships as ES modules. If you only use `checkExact` and `errorMask`, your bundler strips fracture, sediment, and presets. The constraint system is modular by architecture; ESM makes that modularity physical in the bundle.
+- **Severity as a concept, not a type.** In Rust, severity would be an enum with exhaustiveness checking. In TypeScript, it's still an enum, but the runtime representation is just a number. The lesson: severity scoring is a domain concept that transcends the type system. Whether you're in Rust or JS, the logic is "count violations → map to severity level."
+
+## Install
+
+```bash
+npm install @flux/check
 ```
 
 ## CLI
@@ -77,7 +104,7 @@ for (const c of preset.constraints) {
 }
 ```
 
-## API
+## API Reference
 
 ### Core (`src/core.ts`)
 
@@ -140,9 +167,23 @@ See `examples/` for complete usage:
 - `examples/sediment.ts` — Sediment layer corrections
 - `examples/engine.ts` — Full engine with presets
 
-## Ports
+## Performance
 
-Same algorithm in Python (`flux_constraint_exact`, `flux_fracture`, `flux_sediment`), Rust, and C. This is the JavaScript/TypeScript port.
+Built for high-throughput checking. Typed arrays in the hot path, no object allocation during `check()`.
+
+```bash
+flux-check bench --preset automotive --iterations 100000
+```
+
+## Where to Go Next
+
+| Repo | Language | What You'll Learn |
+|------|----------|-------------------|
+| [flux-fracture](https://github.com/SuperInstance/flux-fracture) | Rust | Same fracture algorithm with ownership model and zero-cost generics |
+| [flux-fracture-c](https://github.com/SuperInstance/flux-fracture-c) | C | Single-header fracture, manual memory management, embedded-friendly |
+| [flux-engine-c](https://github.com/SuperInstance/flux-engine-c) | C | Combined engine: check + fracture + sediment in one header |
+| [plato-types](https://github.com/SuperInstance/plato-types) | Python | Tile lifecycle and Lamport clocks for fleet coordination |
+| [tensor-spline](https://github.com/SuperInstance/tensor-spline) | Python | SplineLinear compression for micro models |
 
 ## License
 
