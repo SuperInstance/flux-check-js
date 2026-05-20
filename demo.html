@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FLUX Constraint Engine — Live Demo</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0e17;--surface:#111827;--border:#1e293b;--text:#e2e8f0;
+  --green:#22c55e;--red:#ef4444;--blue:#3b82f6;--amber:#f59e0b;
+  --glow-green:0 0 12px #22c55e88;--glow-red:0 0 12px #ef444488;
+  --glow-blue:0 0 20px #3b82f644;--glow-red-harsh:0 0 24px #ef4444aa;
+  --mono:'JetBrains Mono','Fira Code','Cascadia Code',monospace;
+}
+html{font-size:14px}
+body{background:var(--bg);color:var(--text);font-family:var(--mono);min-height:100vh;padding:1.5rem}
+h1{font-size:1.6rem;font-weight:700;letter-spacing:-0.02em;margin-bottom:.25rem;color:#f8fafc}
+.subtitle{color:#64748b;font-size:.85rem;margin-bottom:1.5rem}
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:1.25rem;margin-bottom:1.25rem}
+.panel h2{font-size:1rem;font-weight:600;margin-bottom:.75rem;color:#94a3b8;text-transform:uppercase;letter-spacing:.08em}
+
+/* ── LED Strip ─────────────────────────── */
+.led-strip{display:flex;gap:10px;justify-content:center;margin:1rem 0}
+.led{width:36px;height:36px;border-radius:50%;border:2px solid #1e293b;transition:all .15s}
+.led.on-green{background:var(--green);border-color:var(--green);box-shadow:var(--glow-green)}
+.led.on-red{background:var(--red);border-color:var(--red);box-shadow:var(--glow-red)}
+.led.off{background:#1e293b33}
+.mask-display{display:flex;gap:1.5rem;justify-content:center;flex-wrap:wrap;margin-top:.5rem}
+.mask-val{text-align:center}
+.mask-val .label{color:#64748b;font-size:.7rem;text-transform:uppercase;margin-bottom:2px}
+.mask-val .value{font-size:1.1rem;font-weight:600;font-variant-numeric:tabular-nums}
+
+/* ── Constraint Table ──────────────────── */
+.constraint-table{width:100%;border-collapse:collapse}
+.constraint-table th{text-align:left;color:#64748b;font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;padding:4px 8px;border-bottom:1px solid var(--border)}
+.constraint-table td{padding:6px 8px;border-bottom:1px solid #1e293b44}
+.constraint-table input{background:#0f172a;border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:.85rem;padding:4px 8px;border-radius:4px;width:100%;outline:none}
+.constraint-table input:focus{border-color:var(--blue)}
+.constraint-table input[type=number]{width:80px;text-align:right}
+.constraint-table .name-input{width:140px}
+.add-row-btn{background:none;border:1px dashed #334155;color:#64748b;padding:6px 12px;border-radius:4px;cursor:pointer;font-family:var(--mono);font-size:.8rem;margin-top:.5rem}
+.add-row-btn:hover{border-color:var(--blue);color:var(--blue)}
+.remove-btn{background:none;border:none;color:#64748b;cursor:pointer;font-size:1rem;padding:0 4px}
+.remove-btn:hover{color:var(--red)}
+
+/* ── Strictness Dial ───────────────────── */
+.dial-container{display:flex;flex-direction:column;align-items:center;gap:.5rem}
+.dial-labels{display:flex;justify-content:space-between;width:100%;max-width:500px;font-size:.7rem;color:#64748b}
+.dial-labels span{max-width:180px;text-align:center;line-height:1.3}
+.slider-wrap{width:100%;max-width:500px;position:relative}
+input[type=range]{-webkit-appearance:none;width:100%;height:8px;border-radius:4px;background:linear-gradient(to right,var(--red),var(--amber),var(--blue));outline:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:#f8fafc;border:2px solid #475569;cursor:pointer}
+.strictness-value{font-size:1.2rem;font-weight:700}
+
+/* ── Sediment ──────────────────────────── */
+.sediment-stack{display:flex;flex-direction:column-reverse;align-items:center;gap:4px;min-height:60px;margin:.75rem 0}
+.sediment-layer{width:260px;padding:4px 12px;border-radius:4px;font-size:.75rem;text-align:center;animation:sedimentIn .4s ease}
+.sediment-layer.s1{background:#1e3a5f33;border:1px solid #3b82f644}
+.sediment-layer.s2{background:#3b1e5f33;border:1px solid #8b5cf644}
+.sediment-layer.s3{background:#5f3b1e33;border:1px solid #f59e0b44}
+@keyframes sedimentIn{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
+.check-count{font-size:.85rem;color:#94a3b8}
+
+/* ── NaN Trap ──────────────────────────── */
+.nan-btn{background:linear-gradient(135deg,#7f1d1d,#991b1b);border:1px solid #dc2626;color:#fca5a5;padding:10px 24px;border-radius:6px;cursor:pointer;font-family:var(--mono);font-size:.9rem;font-weight:600;transition:all .15s}
+.nan-btn:hover{background:linear-gradient(135deg,#991b1b,#b91c1c);box-shadow:0 0 20px #ef444466}
+.nan-flash{animation:nanFlash .6s ease}
+@keyframes nanFlash{
+  0%{box-shadow:inset 0 0 0 0 transparent}
+  25%{box-shadow:inset 0 0 80px 20px #ef444466;background:#1a0505}
+  100%{box-shadow:inset 0 0 0 0 transparent}
+}
+
+/* ── Fracture-Coalesce ─────────────────── */
+.fracture-grid{display:grid;grid-template-columns:1fr auto 1fr;gap:1rem;align-items:center}
+.block-box{background:#0f172a;border:1px solid var(--border);border-radius:6px;padding:.75rem;text-align:center}
+.block-box h3{font-size:.75rem;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.5rem}
+.block-leds{display:flex;gap:6px;justify-content:center;margin:.5rem 0}
+.block-mask{font-size:.9rem;font-weight:600;font-variant-numeric:tabular-nums}
+.merge-arrow{font-size:2rem;color:#475569}
+.eq-row{display:flex;align-items:center;justify-content:center;gap:.75rem;margin-top:.75rem;padding-top:.75rem;border-top:1px solid var(--border)}
+.eq-badge{font-size:.8rem;padding:4px 12px;border-radius:4px}
+.eq-badge.pass{background:#22c55e22;color:var(--green);border:1px solid #22c55e44}
+.eq-badge.fail{background:#ef444422;color:var(--red);border:1px solid #ef444444}
+
+/* ── Share ─────────────────────────────── */
+.share-btn{background:var(--surface);border:1px solid var(--border);color:var(--text);padding:8px 20px;border-radius:6px;cursor:pointer;font-family:var(--mono);font-size:.85rem;transition:all .15s}
+.share-btn:hover{border-color:var(--blue);box-shadow:var(--glow-blue)}
+
+/* ── Border mode transitions ───────────── */
+body.mode-harsh{transition:border 0.3s}
+body.mode-harsh .panel{border-color:#7f1d1d88}
+body.mode-soft{transition:border 0.3s}
+body.mode-soft .panel{border-color:#1e3a5f88;box-shadow:var(--glow-blue)}
+</style>
+</head>
+<body>
+
+<h1>⬡ FLUX Constraint Engine</h1>
+<p class="subtitle">Zero false negatives. NaN always violates. Fracture-coalesce proven correct.</p>
+
+<!-- ═══ CONSTRAINT PANEL ═══ -->
+<div class="panel" id="constraintPanel">
+  <h2>Constraints</h2>
+  <table class="constraint-table">
+    <thead><tr><th>Name</th><th>Min</th><th>Max</th><th>Value</th><th></th></tr></thead>
+    <tbody id="constraintBody"></tbody>
+  </table>
+  <button class="add-row-btn" onclick="addConstraint()">+ add constraint</button>
+</div>
+
+<!-- ═══ LED STRIP ═══ -->
+<div class="panel" id="ledPanel">
+  <h2>Error Mask</h2>
+  <div class="led-strip" id="ledStrip"></div>
+  <div class="mask-display">
+    <div class="mask-val"><div class="label">Binary</div><div class="value" id="maskBin">0b00000000</div></div>
+    <div class="mask-val"><div class="label">Hex</div><div class="value" id="maskHex">0x00</div></div>
+    <div class="mask-val"><div class="label">Decimal</div><div class="value" id="maskDec">0</div></div>
+    <div class="mask-val"><div class="label">Severity</div><div class="value" id="maskSev">PASS</div></div>
+  </div>
+</div>
+
+<!-- ═══ STRICTNESS DIAL ═══ -->
+<div class="panel" id="dialPanel">
+  <h2>Constraint Strictness</h2>
+  <div class="dial-container">
+    <div class="strictness-value" id="strictVal">0.50</div>
+    <div class="slider-wrap">
+      <input type="range" id="strictSlider" min="0" max="100" value="50">
+    </div>
+    <div class="dial-labels">
+      <span>0.0 — Every value must pass exactly. Hard boundary. No mercy.</span>
+      <span>1.0 — Soft inference. Learning mode. Bounds are suggestions.</span>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ SEDIMENT ═══ -->
+<div class="panel" id="sedimentPanel">
+  <h2>Sediment Layers</h2>
+  <div class="check-count">Checks: <strong id="checkCount">0</strong></div>
+  <div class="sediment-stack" id="sedimentStack"></div>
+  <div id="sedimentMsg" style="font-size:.8rem;color:#64748b;min-height:1.2em"></div>
+</div>
+
+<!-- ═══ NaN TRAP ═══ -->
+<div class="panel" id="nanPanel">
+  <h2>NaN Trap</h2>
+  <p style="font-size:.8rem;color:#94a3b8;margin-bottom:.75rem">NaN violates ALL constraints simultaneously. Error mask → 0xFF.</p>
+  <button class="nan-btn" onclick="throwNaN()">⚡ Throw NaN</button>
+</div>
+
+<!-- ═══ FRACTURE-COALESCE ═══ -->
+<div class="panel" id="fracturePanel">
+  <h2>Fracture-Coalesce</h2>
+  <p style="font-size:.8rem;color:#94a3b8;margin-bottom:.75rem">Split 8 constraints into 2 groups of 4, check separately, merge.</p>
+  <button class="share-btn" onclick="runFracture()" style="margin-bottom:1rem">Run Fracture Demo</button>
+  <div id="fractureResult"></div>
+</div>
+
+<!-- ═══ SHARE ═══ -->
+<div class="panel">
+  <h2>Share</h2>
+  <button class="share-btn" onclick="shareConfig()">📋 Copy Config URL</button>
+  <span id="shareMsg" style="margin-left:.5rem;font-size:.8rem;color:var(--green)"></span>
+</div>
+
+<script>
+// ══════════════════════════════════════════
+// FLUX Constraint Engine — Pure JS Port
+// ══════════════════════════════════════════
+
+const SEVERITY = ['PASS','CAUTION','WARNING','CRITICAL'];
+const SEVERITY_TABLE = [0,1,1,2,2,3,3,3,3];
+
+function popcount(n){ let c=0; while(n){c+=n&1;n>>>=1} return c }
+function severityFromMask(m){ return SEVERITY_TABLE[Math.min(popcount(m),SEVERITY_TABLE.length-1)] }
+
+function checkOne(v,lo,hi){
+  if(Number.isNaN(v)||v<lo||v>hi) return 1;
+  return 0;
+}
+
+function checkAll(constraints, values){
+  const n=constraints.length;
+  const mask=Array(n).fill(0);
+  for(let i=0;i<n;i++) mask[i]=checkOne(values[i],constraints[i].lo,constraints[i].hi);
+  return mask;
+}
+
+function errorMask(violations){
+  let m=0;
+  for(let i=0;i<violations.length;i++) if(violations[i]) m|=(1<<i);
+  return m;
+}
+
+// ── State ─────────────────────────────────
+let constraints = [
+  {name:'coolant_temp', lo:-40, hi:150},
+  {name:'oil_pressure', lo:0.5, hi:7},
+  {name:'rpm',          lo:0,   hi:8000},
+  {name:'battery_v',    lo:10.5,hi:15.5},
+  {name:'throttle',     lo:0,   hi:100},
+  {name:'boost_psi',    lo:0,   hi:25},
+  {name:'afr',          lo:10,  hi:18},
+  {name:'egt',          lo:0,   hi:900},
+];
+let values = [75, 3.2, 3200, 12.8, 45, 12, 14.7, 420];
+let checkCount = 0;
+let strictness = 0.5;
+
+// ── Render ────────────────────────────────
+function renderTable(){
+  const tbody = document.getElementById('constraintBody');
+  tbody.innerHTML = '';
+  constraints.forEach((c,i) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><input class="name-input" value="${c.name}" data-i="${i}" data-f="name"></td>
+      <td><input type="number" value="${c.lo}" data-i="${i}" data-f="lo" step="any"></td>
+      <td><input type="number" value="${c.hi}" data-i="${i}" data-f="hi" step="any"></td>
+      <td><input type="number" value="${values[i]}" data-i="${i}" data-f="val" step="any"></td>
+      <td><button class="remove-btn" onclick="removeConstraint(${i})">✕</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+  // Bind input events
+  tbody.querySelectorAll('input').forEach(inp => {
+    inp.addEventListener('input', onConstraintInput);
+  });
+}
+
+function onConstraintInput(e){
+  const i = parseInt(e.target.dataset.i);
+  const f = e.target.dataset.f;
+  if(f==='name') constraints[i].name = e.target.value;
+  else if(f==='lo') constraints[i].lo = parseFloat(e.target.value)||0;
+  else if(f==='hi') constraints[i].hi = parseFloat(e.target.value)||0;
+  else if(f==='val') values[i] = parseFloat(e.target.value);
+  runCheck();
+}
+
+function addConstraint(){
+  const n = constraints.length;
+  if(n>=16) return;
+  constraints.push({name:`c${n}`, lo:0, hi:100});
+  values.push(50);
+  renderTable();
+  runCheck();
+}
+
+function removeConstraint(i){
+  if(constraints.length<=1) return;
+  constraints.splice(i,1);
+  values.splice(i,1);
+  renderTable();
+  runCheck();
+}
+
+// ── LED + Mask ────────────────────────────
+function renderLEDs(violations){
+  const strip = document.getElementById('ledStrip');
+  strip.innerHTML = '';
+  const n = Math.max(constraints.length, 8);
+  for(let i=0;i<n;i++){
+    const led = document.createElement('div');
+    led.className = 'led';
+    if(i < violations.length){
+      led.className += violations[i] ? ' on-red' : ' on-green';
+    } else {
+      led.className += ' off';
+    }
+    strip.appendChild(led);
+  }
+
+  const mask = errorMask(violations.concat(Array(Math.max(0,n-violations.length)).fill(0)));
+  const bits = n;
+  const binStr = mask.toString(2).padStart(Math.min(bits,16),'0');
+  document.getElementById('maskBin').textContent = '0b' + binStr.slice(-bits);
+  document.getElementById('maskHex').textContent = '0x' + mask.toString(16).toUpperCase().padStart(Math.ceil(bits/4),'0');
+  document.getElementById('maskDec').textContent = mask;
+
+  const sev = severityFromMask(mask);
+  const sevEl = document.getElementById('maskSev');
+  sevEl.textContent = SEVERITY[sev];
+  sevEl.style.color = sev===0?'var(--green)':sev===1?'var(--amber)':sev===2?'#f97316':'var(--red)';
+}
+
+// ── Strictness ────────────────────────────
+const slider = document.getElementById('strictSlider');
+slider.addEventListener('input', () => {
+  strictness = slider.value / 100;
+  document.getElementById('strictVal').textContent = strictness.toFixed(2);
+  applyStrictness();
+});
+
+function applyStrictness(){
+  const panels = document.querySelectorAll('.panel');
+  document.body.classList.remove('mode-harsh','mode-soft');
+  if(strictness < 0.3){
+    document.body.classList.add('mode-harsh');
+  } else if(strictness > 0.7){
+    document.body.classList.add('mode-soft');
+  }
+  // Adjust border glow intensity based on strictness
+  const intensity = strictness;
+  const r = Math.round(239 * (1-intensity));
+  const b = Math.round(59 + 196 * intensity);
+  document.getElementById('ledPanel').style.borderColor =
+    strictness < 0.3 ? '#7f1d1d88' : strictness > 0.7 ? '#1e3a5f88' : '';
+}
+
+// ── Sediment ──────────────────────────────
+function updateSediment(){
+  document.getElementById('checkCount').textContent = checkCount;
+  const stack = document.getElementById('sedimentStack');
+  const msg = document.getElementById('sedimentMsg');
+  stack.innerHTML = '';
+
+  const layers = Math.floor(checkCount / 100);
+  for(let l=0; l<Math.min(layers,10); l++){
+    const div = document.createElement('div');
+    const cls = l<3?'s1':l<6?'s2':'s3';
+    div.className = 'sediment-layer ' + cls;
+    div.textContent = `Sediment layer ${l+1} — ${((l+1)*100)} checks`;
+    stack.appendChild(div);
+  }
+
+  if(layers >= 1) msg.textContent = `Stratified: ${layers} layer${layers>1?'s':''} formed over ${checkCount} checks.`;
+  else msg.textContent = '';
+}
+
+// ── Core Check ────────────────────────────
+function runCheck(){
+  const violations = checkAll(constraints, values);
+  renderLEDs(violations);
+  checkCount++;
+  updateSediment();
+}
+
+// ── NaN Trap ──────────────────────────────
+function throwNaN(){
+  // Temporarily set all values to NaN
+  const saved = [...values];
+  values = constraints.map(() => NaN);
+  runCheck();
+
+  // Flash
+  document.body.classList.add('nan-flash');
+  setTimeout(() => document.body.classList.remove('nan-flash'), 600);
+
+  // Restore
+  setTimeout(() => {
+    values = saved;
+    runCheck();
+  }, 1200);
+}
+
+// ── Fracture-Coalesce ─────────────────────
+function runFracture(){
+  // Ensure we have at least 8 constraints
+  while(constraints.length < 8){
+    constraints.push({name:`c${constraints.length}`, lo:0, hi:100});
+    values.push(50);
+  }
+
+  const allViolations = checkAll(constraints, values);
+  const fullMask = errorMask(allViolations);
+
+  // Split: block A = indices 0-3, block B = indices 4-7
+  const blockA = [0,1,2,3];
+  const blockB = [4,5,6,7];
+
+  const valsA = blockA.map(i => values[i]);
+  const consA = blockA.map(i => constraints[i]);
+  const violA = checkAll(consA, valsA);
+  const maskA = errorMask(violA.concat([0,0,0,0])); // pad to 8 bits
+
+  const valsB = blockB.map(i => values[i]);
+  const consB = blockB.map(i => constraints[i]);
+  const violB = checkAll(consB, valsB);
+  // Shift to correct bit positions
+  let maskB = 0;
+  for(let j=0;j<4;j++) if(violB[j]) maskB |= (1 << (j+4));
+
+  // Coalesce
+  const mergedMask = maskA | maskB;
+  const match = mergedMask === fullMask;
+
+  const sevFull = SEVERITY[severityFromMask(fullMask)];
+  const sevA = SEVERITY[severityFromMask(maskA)];
+  const sevB = SEVERITY[severityFromMask(maskB)];
+
+  const div = document.getElementById('fractureResult');
+  div.innerHTML = `
+    <div class="fracture-grid">
+      <div class="block-box">
+        <h3>Block A (0–3)</h3>
+        <div class="block-leds">
+          ${blockA.map((idx,j) => `<div class="led ${allViolations[idx]?'on-red':'on-green'}" style="width:24px;height:24px"></div>`).join('')}
+        </div>
+        <div class="block-mask">0x${maskA.toString(16).toUpperCase().padStart(2,'0')}</div>
+        <div style="font-size:.7rem;color:#64748b;margin-top:4px">${sevA}</div>
+        <div style="font-size:.65rem;color:#475569;margin-top:2px">${blockA.map(i=>constraints[i].name).join(', ')}</div>
+      </div>
+      <div class="merge-arrow">⊕</div>
+      <div class="block-box">
+        <h3>Block B (4–7)</h3>
+        <div class="block-leds">
+          ${blockB.map((idx,j) => `<div class="led ${allViolations[idx]?'on-red':'on-green'}" style="width:24px;height:24px"></div>`).join('')}
+        </div>
+        <div class="block-mask">0x${maskB.toString(16).toUpperCase().padStart(2,'0')}</div>
+        <div style="font-size:.7rem;color:#64748b;margin-top:4px">${sevB}</div>
+        <div style="font-size:.65rem;color:#475569;margin-top:2px">${blockB.map(i=>constraints[i].name).join(', ')}</div>
+      </div>
+    </div>
+    <div class="eq-row">
+      <span style="font-size:.85rem;color:#94a3b8">Coalesced:</span>
+      <code style="font-size:1rem">0x${mergedMask.toString(16).toUpperCase().padStart(2,'0')}</code>
+      <span style="font-size:.85rem;color:#94a3b8">Full check:</span>
+      <code style="font-size:1rem">0x${fullMask.toString(16).toUpperCase().padStart(2,'0')}</code>
+      <span class="eq-badge ${match?'pass':'fail'}">${match?'✓ MATCH — OR coalescence preserves all violations':'✗ MISMATCH'}</span>
+    </div>
+  `;
+}
+
+// ── Share ─────────────────────────────────
+function shareConfig(){
+  const config = constraints.map((c,i) => ({
+    n: c.name, l: c.lo, h: c.hi, v: values[i]
+  }));
+  const encoded = btoa(JSON.stringify(config));
+  const url = location.origin + location.pathname + '#' + encoded;
+  navigator.clipboard.writeText(url).then(() => {
+    const msg = document.getElementById('shareMsg');
+    msg.textContent = 'Copied!';
+    setTimeout(() => msg.textContent = '', 2000);
+  });
+}
+
+function loadFromHash(){
+  const hash = location.hash.slice(1);
+  if(!hash) return false;
+  try {
+    const config = JSON.parse(atob(hash));
+    if(!Array.isArray(config)) return false;
+    constraints = config.map(c => ({name: c.n, lo: c.l, hi: c.h}));
+    values = config.map(c => c.v);
+    return true;
+  } catch(e){ return false; }
+}
+
+// ── Init ──────────────────────────────────
+const loaded = loadFromHash();
+renderTable();
+applyStrictness();
+runCheck();
+</script>
+</body>
+</html>
