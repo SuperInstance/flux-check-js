@@ -35,6 +35,16 @@ export declare class ConstraintEngine {
     addConstraint(name: string, lo: number, hi: number, dims?: number[]): this;
     /** Enable a strategy: "fracture", "sediment", or "exact" */
     use(strategy: Strategy): this;
+    /**
+     * Check N named values against their respective constraints by name.
+     *
+     * Unlike `check()` which accepts positional arrays or records, this
+     * explicitly looks up each constraint by name in the values map.
+     * Returns a combined CheckResult with all violations.
+     *
+     * @param values - Map of constraint name → numeric value to check
+     */
+    checkVector(values: Record<string, number>): CheckResult;
     /** Check values against all constraints */
     check(values: Float64Array | number[] | Record<string, number>): CheckResult;
     /** Fracture the constraint system into independent blocks */
@@ -42,7 +52,7 @@ export declare class ConstraintEngine {
     /** Add a sediment correction layer */
     addSedimentLayer(inputContext: Record<string, unknown>, corrections: ConstraintCorrection[]): void;
     /** Run check through sediment layers */
-    checkWithSediment(values: Record<string, number>): SedimentResult;
+    checkWithSediment(values: Record<string, number> | number[] | Float64Array): SedimentResult;
     get constraintCount(): number;
     get sedimentStack(): SedimentStack | null;
     private _normalizeValues;

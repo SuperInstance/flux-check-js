@@ -27,6 +27,38 @@ export class ConstraintEngine {
         }
         return this;
     }
+    /**
+     * Check N named values against their respective constraints by name.
+     *
+     * Unlike `check()` which accepts positional arrays or records, this
+     * explicitly looks up each constraint by name in the values map.
+     * Returns a combined CheckResult with all violations.
+     *
+     * @param values - Map of constraint name → numeric value to check
+     */
+    checkVector(values) {
+        const arr = new Float64Array(this.constraints.length);
+        for (let i = 0; i < this.constraints.length; i++) {
+            const c = this.constraints[i];
+            arr[i] = values[c.name] ?? NaN;
+        }
+        const bounds = this.constraints.map(c => ({ lo: c.lo, hi: c.hi }));
+        const violations = checkExact(arr, bounds);
+        const mask = errorMask(violations);
+        const severity = severityFromMask(mask);
+        const violatedNames = [];
+        for (let i = 0; i < violations.length; i++) {
+            if (violations[i])
+                violatedNames.push(this.constraints[i].name);
+        }
+        return {
+            errorMask: mask,
+            violations,
+            severity,
+            violationCount: violatedNames.length,
+            violatedNames,
+        };
+    }
     /** Check values against all constraints */
     check(values) {
         const vals = this._normalizeValues(values);
@@ -67,13 +99,24 @@ export class ConstraintEngine {
     checkWithSediment(values) {
         if (!this._sedimentStack)
             throw new Error("Sediment not enabled. Call use('sediment') first.");
-        const baseResult = this.check(values);
+        // Convert array/Float64Array to Record<string, number> for sediment
+        let valueRecord;
+        if (values instanceof Float64Array || Array.isArray(values)) {
+            valueRecord = {};
+            for (let i = 0; i < this.constraints.length; i++) {
+                valueRecord[this.constraints[i].name] = values[i] ?? NaN;
+            }
+        }
+        else {
+            valueRecord = values;
+        }
+        const baseResult = this.check(valueRecord);
         const names = this.constraints.map(c => c.name);
         const defs = {};
         for (const c of this.constraints) {
             defs[c.name] = [c.lo, c.hi];
         }
-        return this._sedimentStack.checkWithSediment(baseResult.errorMask, baseResult.severity, names, values, defs);
+        return this._sedimentStack.checkWithSediment(baseResult.errorMask, baseResult.severity, names, valueRecord, defs);
     }
     get constraintCount() {
         return this.constraints.length;

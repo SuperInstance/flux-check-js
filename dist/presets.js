@@ -84,6 +84,60 @@ export const presets = {
             { name: "battery", lo: 0, hi: 100, unit: "%" },
         ],
     },
+    maritime: {
+        name: "maritime",
+        description: "Maritime navigation and vessel systems constraints",
+        constraints: [
+            { name: "heading", lo: 0, hi: 360, unit: "°" },
+            { name: "speed", lo: 0, hi: 50, unit: "kts" },
+            { name: "draft", lo: 0, hi: 25, unit: "m" },
+            { name: "engine_temp", lo: 60, hi: 120, unit: "°C" },
+            { name: "fuel_level", lo: 0, hi: 100, unit: "%" },
+            { name: "wind_speed", lo: 0, hi: 120, unit: "kts" },
+            { name: "wave_height", lo: 0, hi: 30, unit: "m" },
+            { name: "water_depth", lo: 0, hi: 11000, unit: "m" },
+        ],
+    },
+    nuclear: {
+        name: "nuclear",
+        description: "Nuclear reactor and radiation safety constraints",
+        constraints: [
+            { name: "core_temp", lo: 250, hi: 600, unit: "°C" },
+            { name: "coolant_pressure", lo: 70, hi: 160, unit: "bar" },
+            { name: "radiation_level", lo: 0, hi: 50, unit: "µSv/h" },
+            { name: "neutron_flux", lo: 0, hi: 1e14, unit: "n/cm²/s" },
+            { name: "coolant_flow", lo: 1000, hi: 25000, unit: "m³/h" },
+            { name: "containment_pressure", lo: 0.9, hi: 1.1, unit: "atm" },
+            { name: "steam_temp", lo: 200, hi: 350, unit: "°C" },
+            { name: "boron_concentration", lo: 0, hi: 4000, unit: "ppm" },
+        ],
+    },
+    railway: {
+        name: "railway",
+        description: "Railway signaling and train systems constraints",
+        constraints: [
+            { name: "speed", lo: 0, hi: 350, unit: "km/h" },
+            { name: "brake_pressure", lo: 3.5, hi: 6, unit: "bar" },
+            { name: "axle_temp", lo: -20, hi: 120, unit: "°C" },
+            { name: "pantograph_voltage", lo: 19, hi: 31, unit: "kV" },
+            { name: "track_gauge", lo: 1432, hi: 1440, unit: "mm" },
+            { name: "acceleration", lo: -2, hi: 2, unit: "m/s²" },
+        ],
+    },
+    robotics: {
+        name: "robotics",
+        description: "Robotic arm and autonomous system constraints",
+        constraints: [
+            { name: "joint_temp", lo: -10, hi: 80, unit: "°C" },
+            { name: "motor_current", lo: 0, hi: 30, unit: "A" },
+            { name: "battery_voltage", lo: 18, hi: 29.4, unit: "V" },
+            { name: "payload_mass", lo: 0, hi: 20, unit: "kg" },
+            { name: "joint_torque", lo: 0, hi: 150, unit: "Nm" },
+            { name: "linear_speed", lo: 0, hi: 2, unit: "m/s" },
+            { name: "angular_speed", lo: 0, hi: 180, unit: "°/s" },
+            { name: "lidar_range", lo: 0.1, hi: 40, unit: "m" },
+        ],
+    },
 };
 /** Get a preset by name. Throws if not found. */
 export function getPreset(name) {

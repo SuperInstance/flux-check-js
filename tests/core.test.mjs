@@ -7,6 +7,7 @@ import {
   fracture, coalesce, coalesceArrays, DependencyGraph,
   SedimentStack,
   ConstraintEngine,
+  getPreset, listPresets,
 } from "../dist/index.js";
 
 let passed = 0;
@@ -320,6 +321,115 @@ section("ConstraintEngine Integration");
     threw = true;
   }
   assert(threw, "engine rejects lo > hi");
+}
+
+// ════════════════════════════════════════════════════════════
+// 5. checkVector
+// ════════════════════════════════════════════════════════════
+
+section("checkVector");
+
+{
+  const engine = new ConstraintEngine();
+  engine.addConstraint("temp", 0, 100);
+  engine.addConstraint("pressure", 0, 50);
+  engine.addConstraint("flow", 0.5, 10);
+
+  const r1 = engine.checkVector({ temp: 50, pressure: 25, flow: 5 });
+  assertEqual(r1.errorMask, 0, "checkVector: all pass");
+  assertEqual(r1.violationCount, 0, "checkVector: 0 violations");
+}
+
+{
+  const engine = new ConstraintEngine();
+  engine.addConstraint("temp", 0, 100);
+  engine.addConstraint("pressure", 0, 50);
+  engine.addConstraint("flow", 0.5, 10);
+
+  const r = engine.checkVector({ temp: 200, pressure: 25, flow: 5 });
+  assertEqual(r.errorMask, 0b001, "checkVector: only temp violated");
+  assertEqual(r.violatedNames[0], "temp", "checkVector: correct name");
+  assertEqual(r.severity, Severity.CAUTION, "checkVector: 1 violation = CAUTION");
+}
+
+{
+  const engine = new ConstraintEngine();
+  engine.addConstraint("a", 0, 10);
+  engine.addConstraint("b", 0, 10);
+  engine.addConstraint("c", 0, 10);
+
+  const r = engine.checkVector({ a: 20, b: 20, c: 5 });
+  assertEqual(r.errorMask, 0b011, "checkVector: a and b violated");
+  assertEqual(r.violationCount, 2, "checkVector: 2 violations");
+}
+
+{
+  const engine = new ConstraintEngine();
+  engine.addConstraint("x", 0, 100);
+  engine.addConstraint("y", 0, 100);
+
+  // Missing 'y' → NaN → violation
+  const r = engine.checkVector({ x: 50 });
+  assertEqual(r.errorMask, 0b010, "checkVector: missing key → NaN → violation");
+  assertEqual(r.violatedNames[0], "y", "checkVector: correct missing name");
+}
+
+{
+  const engine = new ConstraintEngine();
+  engine.addConstraint("temp", 0, 100);
+  engine.addConstraint("pressure", 0, 50);
+
+  // checkVector and check(Record) should produce same result
+  const vals = { temp: 50, pressure: 75 };
+  const rv = engine.checkVector(vals);
+  const rc = engine.check(vals);
+  assertEqual(rv.errorMask, rc.errorMask, "checkVector matches check(Record)");
+  assertEqual(rv.violationCount, rc.violationCount, "checkVector violationCount matches");
+}
+
+{
+  // Sediment with number[] input (fix: accept arrays)
+  const engine = new ConstraintEngine();
+  engine.addConstraint("temp", 0, 150);
+  engine.addConstraint("pressure", 0, 100);
+  engine.use("sediment");
+  engine.addSedimentLayer(
+    { reason: "tolerance" },
+    [{ constraintName: "temp", newHi: 200, reason: "extended" }]
+  );
+
+  const result = engine.checkWithSediment([160, 50]);
+  assertEqual(result.passed, true, "sediment accepts number[] and passes");
+}
+
+// ════════════════════════════════════════════════════════════
+// 6. New Presets
+// ════════════════════════════════════════════════════════════
+
+section("New Presets");
+
+{
+  const names = listPresets();
+  assert(names.includes("maritime"), "maritime preset exists");
+  assert(names.includes("nuclear"), "nuclear preset exists");
+  assert(names.includes("railway"), "railway preset exists");
+  assert(names.includes("robotics"), "robotics preset exists");
+  assertEqual(names.length, 10, "10 total presets");
+}
+
+{
+  const maritime = getPreset("maritime");
+  assertEqual(maritime.constraints.length, 8, "maritime has 8 constraints");
+  assertEqual(maritime.constraints[0].name, "heading", "maritime first constraint is heading");
+
+  const nuclear = getPreset("nuclear");
+  assertEqual(nuclear.constraints.length, 8, "nuclear has 8 constraints");
+
+  const railway = getPreset("railway");
+  assertEqual(railway.constraints.length, 6, "railway has 6 constraints");
+
+  const robotics = getPreset("robotics");
+  assertEqual(robotics.constraints.length, 8, "robotics has 8 constraints");
 }
 
 // ════════════════════════════════════════════════════════════

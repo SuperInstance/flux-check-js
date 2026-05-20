@@ -8,7 +8,16 @@ A constraint system checks whether values fall within acceptable bounds. This li
 
 **1. Exact checking.** Given N values and N `(lo, hi)` bounds, check each value against its bound. Produce a violation array and an error bitmask. NaN always violates. Boundary values pass (`<=`). No approximations.
 
-**2. Fracture-coalesce.** When constraints are independent (they share no underlying variables), split them into blocks, check each block separately, then merge the results with bitwise OR. Because independent blocks have disjoint event spaces, the merge is provably lossless — zero false negatives guaranteed.
+When constraints are **independent** (they share no underlying physical dimension), fracture splits them into parallel blocks. Set the `dims` parameter on `addConstraint()` to declare which dimensions each constraint depends on. Constraints sharing a dimension are grouped into the same block. If `dims` is omitted, every constraint is treated as independent (each gets its own dimension), which means fracture produces N blocks of size 1 — not useful. For practical value, assign shared dimensions to coupled constraints:
+
+```js
+// Temperature sensors in the same thermal chamber share dim 0
+engine.addConstraint("temp_a", 0, 100, [0]);
+engine.addConstraint("temp_b", 0, 100, [0]);
+// Pressure sensor is independent — dim 1
+engine.addConstraint("pressure", 0, 50, [1]);
+// Fracture produces 2 blocks: {temp_a, temp_b} and {pressure}
+```
 
 **3. Sediment layers.** Real systems accumulate corrections over time: "we widened the coolant temp range after the sensor upgrade" or "override this fail because we're in test mode." Sediment stacks immutable correction layers. Each layer can widen bounds, force pass/fail, or adjust severity. The stack is append-only — you never lose history.
 
@@ -83,7 +92,7 @@ Violated: coolant_temp, oil_pressure
 
 ## Industry Presets
 
-Six built-in presets for common domains:
+Six Ten built-in presets for common domains:
 
 | Preset | Domain | Constraints |
 |--------|--------|:-----------:|
@@ -93,6 +102,10 @@ Six built-in presets for common domains:
 | `financial` | Trading & risk | 6 |
 | `energy` | Grid & power systems | 6 |
 | `iot` | Sensors & environment | 8 |
+| `maritime` | Navigation & vessel systems | 8 |
+| `nuclear` | Reactor & radiation safety | 8 |
+| `railway` | Signaling & train systems | 6 |
+| `robotics` | Robotic arm & autonomous systems | 8 |
 
 ```js
 import { getPreset, ConstraintEngine } from "@flux/check";
@@ -130,11 +143,13 @@ for (const c of preset.constraints) {
 
 - **`ConstraintEngine`** — Unified interface combining all three.
   - `addConstraint(name, lo, hi, dims?)`
+    - **`dims`** (optional): Array of dimension indices for fracture analysis. Constraints sharing a dimension are grouped into the same fracture block. If omitted, each constraint gets its own unique dimension (all independent). Set `dims` when constraints are physically coupled — e.g., temperature sensors in the same chamber share dimension 0, while a pressure sensor in a different chamber uses dimension 1.
   - `check(values)` → `{ errorMask, violations, severity, violationCount, violatedNames }`
+  - `checkVector(values)` → `CheckResult` — Check N named values against N respective constraints by name. Takes a `Record<string, number>` mapping constraint names to values. Equivalent to `check()` with a record, but explicit about the vector semantics.
   - `use(strategy)` — Enable "fracture" or "sediment"
   - `fracture()` → `FractureResult`
   - `addSedimentLayer(context, corrections)`
-  - `checkWithSediment(values)` → `SedimentResult`
+  - `checkWithSediment(values)` → `SedimentResult` — Accepts `Record<string, number>`, `number[]`, or `Float64Array`.
 
 ### Presets (`src/presets.ts`)
 
