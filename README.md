@@ -1,6 +1,6 @@
 # @flux/check
 
-Flux constraint engine — exact checking, fracture-coalesce, and sediment layers. Zero false negatives.
+Flux constraint engine — exact checking, fracture-coalesce, and sediment layers.
 
 ## How It Works
 
@@ -92,7 +92,7 @@ Violated: coolant_temp, oil_pressure
 
 ## Industry Presets
 
-Six Ten built-in presets for common domains:
+Ten built-in presets for common domains:
 
 | Preset | Domain | Constraints |
 |--------|--------|:-----------:|
