@@ -13,3 +13,5 @@ export { ConstraintEngine } from "./engine.js";
 export type { CheckResult, EngineConstraint } from "./engine.js";
 export { presets, getPreset, listPresets } from "./presets.js";
 export type { Preset, PresetConstraint } from "./presets.js";
+export { DriftDetector } from "./drift.js";
+export type { DriftInfo, DriftConfig } from "./drift.js";

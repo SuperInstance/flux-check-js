@@ -33,3 +33,7 @@ export type { CheckResult, EngineConstraint } from "./engine.js";
 // Presets: industry constraint definitions
 export { presets, getPreset, listPresets } from "./presets.js";
 export type { Preset, PresetConstraint } from "./presets.js";
+
+// Drift: sensor drift detection
+export { DriftDetector } from "./drift.js";
+export type { DriftInfo, DriftConfig } from "./drift.js";

@@ -13,3 +13,5 @@ export { SedimentStack } from "./sediment.js";
 export { ConstraintEngine } from "./engine.js";
 // Presets: industry constraint definitions
 export { presets, getPreset, listPresets } from "./presets.js";
+// Drift: sensor drift detection
+export { DriftDetector } from "./drift.js";

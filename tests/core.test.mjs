@@ -7,6 +7,7 @@ import {
   fracture, coalesce, coalesceArrays, DependencyGraph,
   SedimentStack,
   ConstraintEngine,
+  DriftDetector,
   getPreset, listPresets,
 } from "../dist/index.js";
 
@@ -430,6 +431,255 @@ section("New Presets");
 
   const robotics = getPreset("robotics");
   assertEqual(robotics.constraints.length, 8, "robotics has 8 constraints");
+}
+
+// ════════════════════════════════════════════════════════════
+// 7. Serialization (toJSON / fromJSON)
+// ════════════════════════════════════════════════════════════
+
+section("Serialization (toJSON / fromJSON)");
+
+{
+  const engine = new ConstraintEngine();
+  engine.addConstraint("temp", 0, 100);
+  engine.addConstraint("pressure", 0, 50);
+  engine.addConstraint("flow", 0.5, 10);
+
+  const json = engine.toJSON();
+  const data = JSON.parse(JSON.stringify(json));
+  assertEqual(data.version, 1, "toJSON: version is 1");
+  assertEqual(data.constraints.length, 3, "toJSON: 3 constraints");
+  assertEqual(data.constraints[0].name, "temp", "toJSON: first constraint name");
+  assertEqual(data.constraints[1].lo, 0, "toJSON: second constraint lo");
+  assertEqual(data.constraints[2].hi, 10, "toJSON: third constraint hi");
+  assert(data.strategies.includes("exact"), "toJSON: strategies include exact");
+}
+
+{
+  const engine = new ConstraintEngine();
+  engine.addConstraint("temp", 0, 100);
+  engine.addConstraint("pressure", 0, 50);
+
+  const json = engine.toJSON();
+  const restored = ConstraintEngine.fromJSON(json);
+
+  // Same checks should produce same results
+  const vals = { temp: 50, pressure: 25 };
+  const r1 = engine.check(vals);
+  const r2 = restored.check(vals);
+  assertEqual(r1.errorMask, r2.errorMask, "fromJSON: same errorMask");
+  assertEqual(r1.violationCount, r2.violationCount, "fromJSON: same violationCount");
+  assertEqual(restored.constraintCount, 2, "fromJSON: correct constraint count");
+}
+
+{
+  // Round-trip through JSON string
+  const engine = new ConstraintEngine();
+  engine.addConstraint("a", -10, 10);
+  engine.addConstraint("b", 0, 100, [0, 1]);
+  engine.use("fracture");
+
+  const str = JSON.stringify(engine.toJSON());
+  const restored = ConstraintEngine.fromJSON(JSON.parse(str));
+  assertEqual(restored.constraintCount, 2, "round-trip: 2 constraints");
+
+  const r = restored.check({ a: 50, b: 50 });
+  assertEqual(r.violatedNames[0], "a", "round-trip: a violated (50 > 10)");
+}
+
+{
+  // Serialization with sediment
+  const engine = new ConstraintEngine();
+  engine.addConstraint("temp", 0, 150);
+  engine.addConstraint("pressure", 0, 100);
+  engine.use("sediment");
+  engine.addSedimentLayer(
+    { reason: "sensor tolerance" },
+    [{ constraintName: "temp", newHi: 200, reason: "extended" }]
+  );
+
+  const json = engine.toJSON();
+  assert(json.sedimentLayers != null, "toJSON: sediment layers present");
+  assertEqual(json.sedimentLayers.length, 1, "toJSON: 1 sediment layer");
+
+  const restored = ConstraintEngine.fromJSON(json);
+  const result = restored.checkWithSediment({ temp: 160, pressure: 50 });
+  assertEqual(result.passed, true, "fromJSON: sediment still works");
+}
+
+{
+  // save / load round-trip
+  const engine = new ConstraintEngine();
+  engine.addConstraint("x", 0, 10);
+  engine.addConstraint("y", 0, 10);
+  const path = "/tmp/flux-test-engine.json";
+  engine.save(path);
+  const loaded = ConstraintEngine.load(path);
+  assertEqual(loaded.constraintCount, 2, "save/load: 2 constraints");
+  const r = loaded.check({ x: 5, y: 5 });
+  assertEqual(r.errorMask, 0, "save/load: all pass");
+}
+
+// ════════════════════════════════════════════════════════════
+// 8. Aggregation (checkAndAggregate)
+// ════════════════════════════════════════════════════════════
+
+section("Aggregation (checkAndAggregate)");
+
+{
+  const engine = new ConstraintEngine();
+  engine.addConstraint("temp", 0, 100);
+  engine.addConstraint("pressure", 0, 50);
+
+  const batch = [
+    { temp: 50, pressure: 25 },
+    { temp: 50, pressure: 25 },
+    { temp: 150, pressure: 25 },  // temp violates
+    { temp: 50, pressure: 60 },   // pressure violates
+  ];
+
+  const agg = engine.checkAndAggregate(batch);
+  assertEqual(agg.totalReadings, 4, "aggregate: 4 readings");
+  assertEqual(agg.totalViolations, 2, "aggregate: 2 total violations");
+  assertEqual(agg.violationRate, 2 / 8, "aggregate: violation rate = 2/8");
+  assertEqual(agg.perConstraintViolationRate.temp, 1 / 4, "aggregate: temp violated 1/4");
+  assertEqual(agg.perConstraintViolationRate.pressure, 1 / 4, "aggregate: pressure violated 1/4");
+  assertEqual(agg.worstReading.index, 2, "aggregate: worst reading at index 2 (first violation)");
+  assertEqual(agg.severityBreakdown.PASS, 2, "aggregate: 2 passing readings");
+  assertEqual(agg.severityBreakdown.CAUTION, 2, "aggregate: 2 caution readings");
+}
+
+{
+  const engine = new ConstraintEngine();
+  engine.addConstraint("x", 0, 10);
+
+  const agg = engine.checkAndAggregate([]);
+  assertEqual(agg.totalReadings, 0, "aggregate: empty batch");
+  assertEqual(agg.totalViolations, 0, "aggregate: 0 violations on empty");
+  assertEqual(agg.violationRate, 0, "aggregate: 0 rate on empty");
+}
+
+{
+  const engine = new ConstraintEngine();
+  engine.addConstraint("a", 0, 10);
+  engine.addConstraint("b", 0, 10);
+  engine.addConstraint("c", 0, 10);
+
+  const batch = [
+    { a: 5, b: 5, c: 5 },    // pass
+    { a: 20, b: 20, c: 5 },  // 2 violations
+    { a: 20, b: 20, c: 20 }, // 3 violations — worst
+  ];
+
+  const agg = engine.checkAndAggregate(batch);
+  assertEqual(agg.worstReading.index, 2, "aggregate: worst is last reading (3 violations)");
+  assertEqual(agg.worstReading.result.violationCount, 3, "aggregate: worst has 3 violations");
+  assertEqual(agg.severityBreakdown.WARNING, 1, "aggregate: 1 warning (3 violations)");
+}
+
+// ════════════════════════════════════════════════════════════
+// 9. Drift Detection
+// ════════════════════════════════════════════════════════════
+
+section("Drift Detection");
+
+{
+  const detector = new DriftDetector({ windowSize: 5, driftThreshold: 0.5 });
+  detector.setBounds("temp", 0, 100);
+
+  // Stable readings
+  for (let i = 0; i < 5; i++) {
+    detector.add({ temp: 50 });
+  }
+  const info = detector.detectDrift();
+  assertEqual(info.drifting, false, "drift: stable readings not drifting");
+  assertEqual(info.perSensor.temp.direction, "stable", "drift: direction is stable");
+}
+
+{
+  const detector = new DriftDetector({ windowSize: 5, driftThreshold: 0.5 });
+  detector.setBounds("temp", 0, 100);
+
+  // Upward drift
+  for (let i = 0; i < 5; i++) {
+    detector.add({ temp: 50 + i * 2 });  // 50, 52, 54, 56, 58
+  }
+  const info = detector.detectDrift();
+  assertEqual(info.drifting, true, "drift: upward trend detected");
+  assertEqual(info.perSensor.temp.direction, "up", "drift: direction is up");
+  assert(info.perSensor.temp.rate > 0, "drift: positive rate");
+}
+
+{
+  const detector = new DriftDetector({ windowSize: 5, driftThreshold: 0.5 });
+  detector.setBounds("temp", 0, 100);
+
+  // Downward drift
+  for (let i = 0; i < 5; i++) {
+    detector.add({ temp: 50 - i * 2 });  // 50, 48, 46, 44, 42
+  }
+  const info = detector.detectDrift();
+  assertEqual(info.drifting, true, "drift: downward trend detected");
+  assertEqual(info.perSensor.temp.direction, "down", "drift: direction is down");
+  assert(info.perSensor.temp.rate < 0, "drift: negative rate");
+}
+
+{
+  const detector = new DriftDetector({ windowSize: 5, driftThreshold: 0.5 });
+  detector.setBounds("temp", 0, 100);
+
+  // Upward drift from 80 — should estimate time to hit 100
+  for (let i = 0; i < 5; i++) {
+    detector.add({ temp: 80 + i * 2 });  // 80, 82, 84, 86, 88
+  }
+  const info = detector.detectDrift();
+  assert(info.timeToViolation.temp != null, "drift: timeToViolation computed");
+  assert(info.timeToViolation.temp > 0, "drift: positive time to violation");
+}
+
+{
+  const detector = new DriftDetector({ windowSize: 10, driftThreshold: 0.5 });
+  detector.setBounds("temp", 0, 100);
+  detector.setBounds("pressure", 0, 50);
+
+  // Multi-sensor: temp drifting, pressure stable
+  for (let i = 0; i < 5; i++) {
+    detector.add({ temp: 80 + i * 3, pressure: 25 });
+  }
+  const info = detector.detectDrift();
+  assertEqual(info.drifting, true, "drift: multi-sensor detects drift");
+  assertEqual(info.perSensor.temp.direction, "up", "drift: temp drifting up");
+  assertEqual(info.perSensor.pressure.direction, "stable", "drift: pressure stable");
+}
+
+{
+  const detector = new DriftDetector({ windowSize: 5, driftThreshold: 0.5 });
+
+  for (let i = 0; i < 5; i++) {
+    detector.add({ sensor: 50 + i });
+  }
+  const forecasts = detector.forecast(3);
+  assertEqual(forecasts.length, 3, "forecast: 3 steps ahead");
+  assert(forecasts[0].sensor > 50, "forecast: first step above last");
+  assert(forecasts[1].sensor > forecasts[0].sensor, "forecast: second step higher");
+}
+
+{
+  const detector = new DriftDetector({ windowSize: 5 });
+  assertEqual(detector.ticks, 0, "drift: initial ticks = 0");
+  detector.add({ a: 1 });
+  assertEqual(detector.ticks, 1, "drift: ticks = 1 after add");
+  detector.reset();
+  assertEqual(detector.ticks, 0, "drift: ticks = 0 after reset");
+}
+
+{
+  // Drift with fewer than 3 readings → unknown
+  const detector = new DriftDetector({ windowSize: 5, driftThreshold: 0.5 });
+  detector.add({ temp: 50 });
+  detector.add({ temp: 51 });
+  const info = detector.detectDrift();
+  assertEqual(info.perSensor.temp.direction, "unknown", "drift: unknown with < 3 readings");
 }
 
 // ════════════════════════════════════════════════════════════

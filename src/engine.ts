@@ -5,6 +5,7 @@
  * into a single engine.
  */
 
+import { writeFileSync, readFileSync } from "node:fs";
 import { checkExact, errorMask, Severity, severityFromMask, type ConstraintDef } from "./core.js";
 import { fracture, coalesce, DependencyGraph, type FractureResult } from "./fracture.js";
 import { SedimentStack, type ConstraintCorrection, type SedimentResult } from "./sediment.js";
@@ -125,13 +126,15 @@ export class ConstraintEngine {
   /** Add a sediment correction layer */
   addSedimentLayer(
     inputContext: Record<string, unknown>,
-    corrections: ConstraintCorrection[]
+    corrections: ConstraintCorrection[],
+    provenance?: string,
+    model?: string
   ): void {
     if (!this._sedimentStack) {
       this._sedimentStack = new SedimentStack();
       this.strategies.add("sediment");
     }
-    this._sedimentStack.addLayer(inputContext, corrections);
+    this._sedimentStack.addLayer(inputContext, corrections, provenance ?? "", model ?? "");
   }
 
   /** Run check through sediment layers */
@@ -163,6 +166,117 @@ export class ConstraintEngine {
       valueRecord,
       defs
     );
+  }
+
+  // ── Serialization ──────────────────────────────────────────
+
+  /** Export engine config as a plain object */
+  toJSON(): object {
+    const data: any = {
+      version: 1,
+      constraints: this.constraints.map(c => ({
+        name: c.name,
+        lo: c.lo,
+        hi: c.hi,
+        ...(c.dims ? { dims: c.dims } : {}),
+      })),
+      strategies: [...this.strategies],
+    };
+    if (this._sedimentStack) {
+      data.sedimentLayers = this._sedimentStack.activeLayers.map(l => ({
+        inputContext: l.inputContext,
+        corrections: l.corrections,
+        provenance: l.provenance,
+        model: l.model,
+      }));
+    }
+    return data;
+  }
+
+  /** Reconstruct a ConstraintEngine from serialized config */
+  static fromJSON(data: any): ConstraintEngine {
+    const engine = new ConstraintEngine();
+    for (const c of data.constraints) {
+      engine.addConstraint(c.name, c.lo, c.hi, c.dims);
+    }
+    for (const s of (data.strategies ?? [])) {
+      if (s !== "exact") engine.use(s as Strategy);
+    }
+    for (const layer of (data.sedimentLayers ?? [])) {
+      engine.addSedimentLayer(layer.inputContext, layer.corrections, layer.provenance, layer.model);
+    }
+    return engine;
+  }
+
+  /** Write engine config to a file (Node.js only) */
+  save(path: string): void {
+    writeFileSync(path, JSON.stringify(this.toJSON(), null, 2), "utf-8");
+  }
+
+  /** Load a ConstraintEngine from a file */
+  static load(path: string): ConstraintEngine {
+    const raw = readFileSync(path, "utf-8");
+    return ConstraintEngine.fromJSON(JSON.parse(raw));
+  }
+
+  // ── Aggregation ────────────────────────────────────────────
+
+  /** Check a batch of readings and return aggregate statistics */
+  checkAndAggregate(valuesBatch: Record<string, number>[]): {
+    totalReadings: number;
+    totalViolations: number;
+    violationRate: number;
+    perConstraintViolationRate: Record<string, number>;
+    worstReading: { index: number; result: CheckResult };
+    severityBreakdown: Record<string, number>;
+  } {
+    let totalViolations = 0;
+    const perConstraintCounts: Record<string, number> = {};
+    for (const c of this.constraints) {
+      perConstraintCounts[c.name] = 0;
+    }
+    const severityBreakdown: Record<string, number> = {
+      PASS: 0,
+      CAUTION: 0,
+      WARNING: 0,
+      CRITICAL: 0,
+    };
+    let worstIdx = 0;
+    let worstResult: CheckResult | null = null;
+    let worstViolationCount = -1;
+
+    const results: CheckResult[] = [];
+    for (let i = 0; i < valuesBatch.length; i++) {
+      const result = this.check(valuesBatch[i]);
+      results.push(result);
+      totalViolations += result.violationCount;
+      for (const name of result.violatedNames) {
+        perConstraintCounts[name]++;
+      }
+      const sevKey = Severity[result.severity] as string;
+      severityBreakdown[sevKey]++;
+      if (result.violationCount > worstViolationCount) {
+        worstViolationCount = result.violationCount;
+        worstIdx = i;
+        worstResult = result;
+      }
+    }
+
+    const totalChecks = valuesBatch.length * this.constraints.length;
+    const perConstraintViolationRate: Record<string, number> = {};
+    for (const c of this.constraints) {
+      perConstraintViolationRate[c.name] =
+        valuesBatch.length > 0 ? perConstraintCounts[c.name] / valuesBatch.length : 0;
+    }
+
+    return {
+      totalReadings: valuesBatch.length,
+      totalViolations,
+      violationRate: totalChecks > 0 ? totalViolations / totalChecks : 0,
+      perConstraintViolationRate,
+      worstReading: { index: worstIdx, result: worstResult ?? this.check(valuesBatch[0] ?? {}) },
+      severityBreakdown,
+    };
   }
 
   get constraintCount(): number {

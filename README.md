@@ -150,6 +150,39 @@ for (const c of preset.constraints) {
   - `fracture()` → `FractureResult`
   - `addSedimentLayer(context, corrections)`
   - `checkWithSediment(values)` → `SedimentResult` — Accepts `Record<string, number>`, `number[]`, or `Float64Array`.
+  - **`toJSON()`** → `object` — Serialize engine config (constraints, strategies, sediment layers) to a plain object. JSON-safe for `JSON.stringify`.
+  - **`static fromJSON(data)`** → `ConstraintEngine` — Reconstruct an engine from serialized config, including sediment layers.
+  - **`save(path)`** — Write engine config to a JSON file (Node.js only).
+  - **`static load(path)`** → `ConstraintEngine` — Load an engine from a JSON file.
+  - **`checkAndAggregate(valuesBatch)`** → `{ totalReadings, totalViolations, violationRate, perConstraintViolationRate, worstReading, severityBreakdown }` — Batch check with aggregate statistics across all readings.
+
+### Drift Detection (`src/drift.ts`)
+
+- **`DriftDetector`** — Rolling-window linear regression for sensor drift detection.
+  - `setBounds(sensor, lo, hi)` — Register bounds for time-to-violation estimation.
+  - `add(values)` — Record a reading (map of sensor name → value).
+  - `detectDrift()` → `{ drifting, perSensor, timeToViolation }` — Detect drift and estimate time to bound violation.
+  - `forecast(n)` → `Record<string, number>[]` — Forecast n future readings using linear extrapolation.
+  - `ticks` — Number of readings recorded.
+  - `reset()` — Clear all tracked data.
+
+```js
+import { DriftDetector } from "@flux/check";
+
+const detector = new DriftDetector({ windowSize: 20, driftThreshold: 0.5 });
+detector.setBounds("coolant_temp", -40, 150);
+
+for (const reading of sensorStream) {
+  detector.add({ coolant_temp: reading });
+}
+
+const drift = detector.detectDrift();
+if (drift.drifting) {
+  console.log(`Drift detected! Time to violation: ${drift.timeToViolation.coolant_temp} readings`);
+  const forecast = detector.forecast(5);
+  console.log("Next 5 readings:", forecast);
+}
+```
 
 ### Presets (`src/presets.ts`)
 
