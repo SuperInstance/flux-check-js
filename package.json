@@ -1,5 +1,5 @@
 {
-  "name": "@flux/check",
+  "name": "@superinstance/flux-check",
   "version": "0.1.0",
   "type": "module",
   "description": "Flux constraint engine — exact checking, fracture-coalesce, and sediment layers. Zero false negatives.",
