@@ -1,8 +1,8 @@
 {
   "name": "@superinstance/flux-check",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
-  "description": "Flux constraint engine — exact checking, fracture-coalesce, and sediment layers. Zero false negatives.",
+  "description": "Flux constraint engine \u2014 exact checking, fracture-coalesce, and sediment layers. Zero false negatives.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
@@ -50,5 +50,9 @@
   "devDependencies": {
     "@types/node": "^25.9.1",
     "typescript": "^6.0.3"
+  },
+  "homepage": "https://github.com/SuperInstance/flux-check-js#readme",
+  "bugs": {
+    "url": "https://github.com/SuperInstance/flux-check-js/issues"
   }
 }
